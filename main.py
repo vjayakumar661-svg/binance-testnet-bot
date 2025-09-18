@@ -4,10 +4,14 @@ import logging
 from datetime import datetime, timezone
 from binance.client import Client
 from binance.enums import *
+import telegram
 
 # ===== CONFIG =====
-API_KEY = "RNHRocFsqfkAXQPX9iJgeIna24lL5HHbsM3vo5t8MFEoQ8KuYvuD7QgxSWQ8HW0r"
-API_SECRET = "U7qxLZDxD7BXiavmzyMZIixiXQlFQ8PsYIPhxmBXXe4D5RNvOfXxS7ue42DwxLIx"
+API_KEY = "YOUR_TESTNET_API_KEY"
+API_SECRET = "YOUR_TESTNET_API_SECRET"
+
+TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"
 
 EQUITY = 118.0          # starting USDT
 ALLOC_PCT = 0.05        # 5% per trade
@@ -17,10 +21,11 @@ SL_PCT = 0.007          # Stop Loss 0.7%
 MAX_TRADES = 3
 
 # ===== API SETUP (TESTNET) =====
-client = Client(API_KEY, API_SECRET)
-client.API_URL = "https://testnet.binance.vision/api"   # Force testnet endpoint
-
+client = Client(API_KEY, API_SECRET, testnet=True)
 TREND_API = "https://api.coingecko.com/api/v3/search/trending"
+
+# ===== TELEGRAM BOT =====
+tg_bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 # ===== LOGGING =====
 logging.basicConfig(format="%(asctime)s, %(levelname)s: %(message)s", level=logging.INFO)
@@ -33,6 +38,12 @@ daily_start_equity = EQUITY
 last_summary_date = datetime.now(timezone.utc).date()
 
 # ===== FUNCTIONS =====
+def send_telegram(msg):
+    try:
+        tg_bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
+    except Exception as e:
+        logging.error(f"Telegram send failed: {e}")
+
 def record_trade(symbol, entry, exit, qty, pnl):
     global daily_pnl
     trade_history.append({
@@ -53,10 +64,13 @@ def print_daily_summary():
     net_pnl = round(daily_pnl, 4)
     pct = round((net_pnl / daily_start_equity) * 100, 2) if daily_start_equity else 0
 
-    logging.info(f"--- DAILY SUMMARY ({last_summary_date}) ---")
-    logging.info(f"Total Trades: {trades} | Wins: {wins} | Losses: {losses}")
-    logging.info(f"Net PnL: {net_pnl} USDT ({pct}%) | Equity: {round(daily_start_equity + net_pnl, 4)} USDT")
-    logging.info("------------------------------")
+    summary = f"--- DAILY SUMMARY ({last_summary_date}) ---\n"
+    summary += f"Total Trades: {trades} | Wins: {wins} | Losses: {losses}\n"
+    summary += f"Net PnL: {net_pnl} USDT ({pct}%) | Equity: {round(daily_start_equity + net_pnl, 4)} USDT\n"
+    summary += "----------------------------------------"
+
+    logging.info(summary)
+    send_telegram(summary)
 
     trade_history.clear()
     daily_start_equity += net_pnl
@@ -65,7 +79,6 @@ def print_daily_summary():
     last_summary_date = datetime.now(timezone.utc).date()
 
 def get_binance_symbols():
-    """Fetch all tradable Binance Testnet symbols"""
     try:
         info = client.get_exchange_info()
         return {s["symbol"] for s in info["symbols"]}
@@ -74,13 +87,12 @@ def get_binance_symbols():
         return set()
 
 def fetch_trending_binance_tokens(binance_symbols):
-    """Get trending tokens from CoinGecko and keep only those tradable on Binance Testnet"""
     try:
         r = requests.get(TREND_API, timeout=10)
         data = r.json().get("coins", [])
         trending = [coin["item"]["symbol"].upper() + "USDT" for coin in data]
         valid = [t for t in trending if t in binance_symbols]
-        return valid[:MAX_TRADES] if valid else ["BTCUSDT"]  # fallback
+        return valid[:MAX_TRADES] if valid else ["BTCUSDT"]
     except Exception as e:
         logging.error(f"Failed to fetch trending tokens: {e}")
         return ["BTCUSDT"]
@@ -116,12 +128,14 @@ def run_bot():
                     pnl = (price - trade["entry"]) * trade["qty"]
                     record_trade(sym, trade["entry"], price, trade["qty"], pnl)
                     EQUITY += pnl
+                    send_telegram(f"✅ SELL (TP) → {sym} @ {price} | PnL: {round(pnl,4)} USDT")
                     to_close.append(sym)
                 elif price <= trade["sl"]:
                     logging.info(f"❌ SELL (SL) → {sym} @ {price}")
                     pnl = (price - trade["entry"]) * trade["qty"]
                     record_trade(sym, trade["entry"], price, trade["qty"], pnl)
                     EQUITY += pnl
+                    send_telegram(f"❌ SELL (SL) → {sym} @ {price} | PnL: {round(pnl,4)} USDT")
                     to_close.append(sym)
 
             for sym in to_close:
@@ -146,10 +160,11 @@ def run_bot():
 
                     open_trades[sym] = {"entry": price, "tp": tp, "sl": sl, "qty": qty}
                     logging.info(f"✅ BUY → {sym} @ {price} | qty={qty} | TP={tp:.2f}, SL={sl:.2f}")
+                    send_telegram(f"✅ BUY → {sym} @ {price} | qty={qty} | TP={tp:.2f}, SL={sl:.2f}")
 
             logging.info(f"Open trades: {list(open_trades.keys())}")
 
-            # Daily summary reset
+            # Daily summary
             if datetime.now(timezone.utc).date() != last_summary_date:
                 print_daily_summary()
 
@@ -162,3 +177,4 @@ def run_bot():
 # ===== RUN =====
 if __name__ == "__main__":
     run_bot()
+        
