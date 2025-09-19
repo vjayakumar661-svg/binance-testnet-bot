@@ -1,46 +1,24 @@
-import pandas as pd
-import time
-from binance.client import Client
-from ta.momentum import RSIIndicator
-from ta.trend import EMAIndicator
+import MetaTrader5 as mt5
 
-# ===== CONFIG =====
-API_KEY = "RNHRocFsqfkAXQPX9iJgeIna24lL5HHbsM3vo5t8MFEoQ8KuYvuD7QgxSWQ8HW0r"
-API_SECRET = "U7qxLZDxD7BXiavmzyMZIixiXQlFQ8PsYIPhxmBXXe4D5RNvOfXxS7ue42DwxLIx"
-SYMBOL = "BTCUSDT"
-INTERVAL = "1m"
+LOGIN = 213669683
+PASSWORD = "j&LUr2Xu"   # email/dashboardல வந்த trader password paste பண்ணுங்க
+SERVER = "OctaFX-Demo"
 
-# Connect to Binance Testnet
-client = Client(API_KEY, API_SECRET, testnet=True)
+# Connect to MT5
+if not mt5.initialize(login=LOGIN, password=PASSWORD, server=SERVER):
+    print("❌ Connection failed")
+    mt5.shutdown()
+else:
+    print("✅ Connected to MT5 successfully!")
 
-# Get historical candles
-def get_data():
-    klines = client.get_klines(symbol=SYMBOL, interval=INTERVAL, limit=100)
-    df = pd.DataFrame(klines, columns=[
-        "time","o","h","l","c","v","ct","qav","nt","tbbav","tbqav","ignore"])
-    df["c"] = df["c"].astype(float)
-    return df
+    # Get account info
+    account_info = mt5.account_info()
+    if account_info != None:
+        print(f"Balance: {account_info.balance}")
+        print(f"Leverage: {account_info.leverage}")
+        print(f"Currency: {account_info.currency}")
+    else:
+        print("Unable to retrieve account info")
 
-# Strategy
-def strategy(df):
-    df["ema"] = EMAIndicator(df["c"], 9).ema_indicator()
-    df["rsi"] = RSIIndicator(df["c"], 14).rsi()
-    latest = df.iloc[-1]
-
-    if latest["c"] > latest["ema"] and latest["rsi"] < 70:
-        return "BUY"
-    elif latest["c"] < latest["ema"] and latest["rsi"] > 30:
-        return "SELL"
-    return "HOLD"
-
-# Main loop
-def run():
-    while True:
-        df = get_data()
-        signal = strategy(df)
-        price = df.iloc[-1]["c"]
-        print(f"Signal: {signal} | Price: {price}")
-        time.sleep(60)  # check every 1 minute
-
-if __name__ == "__main__":
-    run()
+    mt5.shutdown()
+    
