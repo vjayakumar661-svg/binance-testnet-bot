@@ -6,8 +6,6 @@ from binance.client import Client
 from binance.enums import *
 
 # ===== CONFIG =====
-API_KEY = "RNHRocFsqfkAXQPX9iJgeIna24lL5HHbsM3vo5t8MFEoQ8KuYvuD7QgxSWQ8HW0r"
-API_SECRET = "U7qxLZDxD7BXiavmzyMZIixiXQlFQ8PsYIPhxmBXXe4D5RNvOfXxS7ue42DwxLIx"
 
 EQUITY = 118.0          # starting USDT
 ALLOC_PCT = 0.05        # 5% per trade
@@ -17,7 +15,7 @@ SL_PCT = 0.007          # Stop Loss 0.7%
 MAX_TRADES = 3
 
 # ===== API SETUP (TESTNET) =====
-client = Client(API_KEY, API_SECRET, testnet=True)
+client = Client(API_KEY, API_SECRET, testnet=false)
 TREND_API = "https://api.coingecko.com/api/v3/search/trending"
 
 # ===== LOGGING =====
